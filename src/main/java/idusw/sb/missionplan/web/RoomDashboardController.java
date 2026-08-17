@@ -234,6 +234,42 @@ public class RoomDashboardController {
         return redirectUrl(code, start, day);
     }
 
+    @PostMapping("/missions/{missionId}/edit")
+    public String edit(@PathVariable String code, @PathVariable Long missionId,
+                        @RequestParam String title,
+                        @RequestParam(required = false) String start,
+                        @RequestParam(required = false) String day,
+                        HttpServletRequest request, RedirectAttributes redirectAttributes) {
+        Member me = (Member) request.getAttribute(MemberSessionFilter.CURRENT_MEMBER_ATTR);
+
+        if (title.isBlank()) {
+            redirectAttributes.addFlashAttribute("error", "미션 내용을 입력해주세요.");
+            return redirectUrl(code, start, day);
+        }
+
+        try {
+            missionService.editTitle(missionId, me.getId(), title.trim());
+        } catch (MissionAccessDeniedException e) {
+            redirectAttributes.addFlashAttribute("error", e.getMessage());
+        }
+        return redirectUrl(code, start, day);
+    }
+
+    @PostMapping("/missions/{missionId}/delete")
+    public String delete(@PathVariable String code, @PathVariable Long missionId,
+                          @RequestParam(required = false) String start,
+                          @RequestParam(required = false) String day,
+                          HttpServletRequest request, RedirectAttributes redirectAttributes) {
+        Member me = (Member) request.getAttribute(MemberSessionFilter.CURRENT_MEMBER_ATTR);
+
+        try {
+            missionService.delete(missionId, me.getId());
+        } catch (MissionAccessDeniedException e) {
+            redirectAttributes.addFlashAttribute("error", e.getMessage());
+        }
+        return redirectUrl(code, start, day);
+    }
+
     private String redirectUrl(String code, String start, String day) {
         StringBuilder url = new StringBuilder("redirect:/room/").append(code);
         if (start != null) {

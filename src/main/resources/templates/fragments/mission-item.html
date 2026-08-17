@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<!--
+  내 미션 한 줄에 붙는 액션 3종(완료 토글/수정/삭제).
+  start, day는 주간 보드 날짜 상세에서 호출할 때만 넘긴다 — 원래 보던 날짜로 되돌아가기 위함.
+  오늘 체크리스트에서 부를 때는 start/day 없이 null로 넘긴다.
+-->
+<th:block th:fragment="actions(mission, code, start, day)">
+    <form th:action="@{/room/{code}/missions/{id}/toggle(code=${code},id=${mission.id})}"
+          method="post" style="display:inline">
+        <input type="hidden" name="start" th:if="${start != null}" th:value="${start}">
+        <input type="hidden" name="day" th:if="${day != null}" th:value="${day}">
+        <button type="submit" th:classappend="${mission.done} ? 'btn-undo' : 'btn-done'"
+                th:text="${mission.done} ? '완료 취소' : '완료로 표시'"></button>
+    </form>
+
+    <details class="inline-edit">
+        <summary>수정</summary>
+        <form th:action="@{/room/{code}/missions/{id}/edit(code=${code},id=${mission.id})}" method="post">
+            <input type="hidden" name="start" th:if="${start != null}" th:value="${start}">
+            <input type="hidden" name="day" th:if="${day != null}" th:value="${day}">
+            <input type="text" name="title" th:value="${mission.title}" required>
+            <button type="submit" class="btn-primary">저장</button>
+        </form>
+    </details>
+
+    <details class="inline-delete">
+        <summary>삭제</summary>
+        <form th:action="@{/room/{code}/missions/{id}/delete(code=${code},id=${mission.id})}" method="post">
+            <input type="hidden" name="start" th:if="${start != null}" th:value="${start}">
+            <input type="hidden" name="day" th:if="${day != null}" th:value="${day}">
+            <span>정말 삭제할까요?</span>
+            <button type="submit" class="btn-undo">삭제 확정</button>
+        </form>
+    </details>
+</th:block>
+</body>
+</html>

@@ -21,15 +21,11 @@
             <ul>
                 <li th:each="mission : ${myTodayMissions}"
                     th:classappend="${mission.done} ? 'mission-done' : (${mission.penaltyWon > 0} ? 'mission-late' : '')">
-                    <form th:action="@{/room/{code}/missions/{id}/toggle(code=${room.inviteCode},id=${mission.id})}"
-                          method="post" style="display:inline">
-                        <button type="submit" th:classappend="${mission.done} ? 'btn-undo' : 'btn-done'"
-                                th:text="${mission.done} ? '완료 취소' : '완료로 표시'"></button>
-                    </form>
                     <span class="mission-title" th:classappend="${mission.done} ? 'done' : ''"
                           th:text="${mission.title}"></span>
                     <span th:if="${mission.penaltyWon > 0}" class="penalty-badge"
                           th:text="${mission.penaltyWon / 1000} + '일 밀림 · ' + ${mission.penaltyWon} + '원'"></span>
+                    <span th:replace="~{fragments/mission-item :: actions(${mission}, ${room.inviteCode}, null, null)}"></span>
                 </li>
                 <li th:if="${#lists.isEmpty(myTodayMissions)}">할 일이 없습니다. 아래 주간 보드에서 등록해보세요.</li>
             </ul>
@@ -95,15 +91,9 @@
                 <ul>
                     <li th:each="mission : ${selectedDayMyMissions}"
                         th:classappend="${mission.done} ? 'mission-done' : ''">
-                        <form th:action="@{/room/{code}/missions/{id}/toggle(code=${room.inviteCode},id=${mission.id})}"
-                              method="post" style="display:inline">
-                            <input type="hidden" name="start" th:value="${cycleStart}">
-                            <input type="hidden" name="day" th:value="${selectedDay}">
-                            <button type="submit" th:classappend="${mission.done} ? 'btn-undo' : 'btn-done'"
-                                    th:text="${mission.done} ? '완료 취소' : '완료로 표시'"></button>
-                        </form>
                         <span class="mission-title" th:classappend="${mission.done} ? 'done' : ''"
                               th:text="${mission.title}"></span>
+                        <span th:replace="~{fragments/mission-item :: actions(${mission}, ${room.inviteCode}, ${cycleStart}, ${selectedDay})}"></span>
                     </li>
                     <li th:if="${#lists.isEmpty(selectedDayMyMissions)}">등록된 미션이 없습니다.</li>
                 </ul>

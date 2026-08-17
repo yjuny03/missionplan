@@ -55,6 +55,10 @@ public class Mission {
         this.doneAt = null;
     }
 
+    public void editTitle(String title) {
+        this.title = title;
+    }
+
     public Long getId() {
         return id;
     }

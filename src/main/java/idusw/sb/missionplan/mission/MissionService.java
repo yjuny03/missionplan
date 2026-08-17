@@ -37,6 +37,30 @@ public class MissionService {
         }
     }
 
+    @Transactional
+    public void editTitle(Long missionId, Long requesterMemberId, String newTitle) {
+        Mission mission = missionRepository.findById(missionId)
+                .orElseThrow(MissionAccessDeniedException::new);
+
+        if (!mission.getMemberId().equals(requesterMemberId)) {
+            throw new MissionAccessDeniedException();
+        }
+
+        mission.editTitle(newTitle);
+    }
+
+    @Transactional
+    public void delete(Long missionId, Long requesterMemberId) {
+        Mission mission = missionRepository.findById(missionId)
+                .orElseThrow(MissionAccessDeniedException::new);
+
+        if (!mission.getMemberId().equals(requesterMemberId)) {
+            throw new MissionAccessDeniedException();
+        }
+
+        missionRepository.delete(mission);
+    }
+
     /**
      * 이번 주기에서 아직 안 끝난 것 전부 + 오늘 끝낸 것. 밀린 항목은 끝낼 때까지 계속 보인다.
      */

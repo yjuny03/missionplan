@@ -250,6 +250,77 @@ button:active {
     box-shadow: 0 2px 6px rgba(192, 57, 43, 0.3);
 }
 
+/* 수정/삭제 — 클릭하면 인라인 폼이 뜨는 팝오버. JS 없이 <details>로 구현 */
+details.inline-edit,
+details.inline-delete {
+    display: inline-block;
+    position: relative;
+}
+
+details.inline-edit > summary,
+details.inline-delete > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 8px 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    background: var(--surface);
+    transition: background .15s, border-color .15s;
+}
+
+details.inline-edit > summary::-webkit-details-marker,
+details.inline-delete > summary::-webkit-details-marker {
+    display: none;
+}
+
+details.inline-edit > summary:hover {
+    background: var(--surface-alt);
+    border-color: var(--text-muted);
+}
+
+details.inline-delete > summary {
+    color: var(--text-danger);
+    border-color: var(--border-danger);
+    background: var(--bg-danger);
+}
+
+details.inline-delete > summary:hover {
+    background: var(--text-danger);
+    color: #fff;
+    border-color: var(--text-danger);
+}
+
+details.inline-edit form,
+details.inline-delete form {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 5;
+    margin: 0;
+    padding: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    white-space: nowrap;
+}
+
+details.inline-edit input[type="text"] {
+    width: 220px;
+    max-width: 220px;
+    margin-top: 0;
+}
+
+details.inline-delete form span {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
 ul {
     list-style: none;
     padding: 0;
