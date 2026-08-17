@@ -176,15 +176,15 @@ input[type="text"]:focus {
     box-shadow: 0 0 0 3px var(--bg-accent);
 }
 
-/* "미션 내용 [입력] [추가]" 처럼 한 줄로 붙는 폼 */
-#mission-title-form {
+/* "미션 내용 [입력] [추가]" 처럼 한 줄로 붙는 폼. 요일 섹션마다 하나씩 반복되므로 class로 */
+.mission-title-form {
     display: flex;
     gap: 8px;
     align-items: center;
     max-width: 480px;
 }
 
-#mission-title-form input[type="text"] {
+.mission-title-form input[type="text"] {
     flex: 1;
     max-width: none;
     margin-top: 0;
@@ -465,6 +465,40 @@ table a:hover {
     margin-top: 16px;
     padding-top: 16px;
     border-top: 1px solid var(--border);
+}
+
+/* 주간 보드: 표 아래 요일 7개를 클릭 없이 전부 세로로 펼쳐둔다 */
+.week-days {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.week-day {
+    scroll-margin-top: 12px;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+}
+
+.week-day.today {
+    border: 2px solid var(--accent);
+}
+
+.today-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 2px 8px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 10px;
+    vertical-align: middle;
 }
 
 /* 정산 요약 카드 */

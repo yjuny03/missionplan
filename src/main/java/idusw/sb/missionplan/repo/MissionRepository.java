@@ -7,7 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface MissionRepository extends JpaRepository<Mission, Long> {
 
-    List<Mission> findByRoomIdAndTargetDateBetween(Long roomId, LocalDate start, LocalDate end);
+    List<Mission> findByRoomIdAndTargetDateBetweenOrderByTargetDateAscIdAsc(Long roomId, LocalDate start, LocalDate end);
 
     List<Mission> findByMemberIdAndTargetDateBetweenOrderByTargetDateAscIdAsc(
             Long memberId, LocalDate start, LocalDate end);

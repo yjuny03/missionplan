@@ -178,3 +178,100 @@ flash attribute를 쓰는 요청"에서만 재현된다. 세션이 한 번 만�
 해결 완료. 방이 2명(지훈/서연)으로 찬 상태에서 "지훈" 닉네임으로 재참여 →
 3번째 멤버가 생기지 않고 기존 자리를 되찾았고, "서연님 오늘 현황"에 서연이 등록한
 미션이 정확히 보이는 것까지 브라우저로 확인했다.
+
+---
+
+## 4. 대시보드 페이지 하나 여는 데 DB 왕복이 약 20번 — 체감 로딩이 느림
+
+**발생 시점:** 오늘/주간/정산 통합 대시보드 + 미션 수정·삭제 기능까지 다 만든 뒤,
+팀원이 실제로 같이 써보다가 "표를 클릭해서 입력할 때마다, 그리고 저장할 때마다
+로딩이 걸려서 하나씩 등록하기 너무 불편하다"고 보고.
+
+### 증상
+
+명시적인 에러나 예외는 없었다. 그냥 페이지가 뜰 때마다, 특히 주간 보드에서 날짜를
+클릭하거나 미션을 추가/체크할 때마다 눈에 띄게 로딩이 걸렸다. 무료 티어 Neon Postgres를
+쓰고 있어서 "그냥 원래 느린 건가 보다" 하고 넘어갈 뻔했다.
+
+### 원인
+
+증상만 보고 넘어가지 않고 `RoomDashboardController.dashboard()` 한 번 호출에서
+실제로 DB에 몇 번 다녀오는지 코드를 세어봤다.
+
+```
+memberRepository.findByRoomId(...)          →  1번   (파트너 찾기)
+addTodayChecklist                            →  2번   (내 오늘 목록 + 상대 오늘 목록)
+addWeekGrid: 7일 × 최대 2명                    → 14번   (요일 칸 하나하나마다 따로 조회)
+addDaySelection (날짜를 클릭한 경우)             →  2번   (내 그날 목록 + 상대 그날 목록)
+addSettlement: memberRepository.findByRoomId  →  1번   (위에서 이미 조회했는데 또 조회 — 중복)
+              + 멤버 2명 × 정산용 조회          →  2번
+─────────────────────────────────────────────────────
+합계                                          → 최대 22번
+```
+
+**한 페이지를 그리는 데 DB를 20번 넘게 왕복했다.** 원인은 "요일 칸 하나, 상대방 목록
+하나"처럼 화면에 보이는 조각 단위로 그때그때 쿼리를 날리는 구조였기 때문이다 —
+전형적인 N+1 쿼리 패턴이다. 로컬 DB라면 왕복 한 번이 1ms 이하라 20번이어도 티가 안
+나지만, Neon처럼 지연이 있는 원격 DB(리전이 Singapore라 한국에서 왕복마다 실측
+100ms 안팎)에서는 20번이면 그것만으로 2초 안팎이 그냥 깔린다. 게다가 무료 티어는
+5분 유휴 시 컴퓨트가 잠드는데, Hikari를 `minimum-idle=0`으로 맞춰둔 상태라(SPEC §7
+참고) 연결을 오래 쥐고 있지 않아서 유휴 후 첫 요청마다 콜드스타트까지 겹칠 수 있다.
+
+즉 팀원이 말한 "무료 DB라 어쩔 수 없이 느린 것 같다"는 진단은 방향은 맞았지만
+원인이 달랐다. DB 자체가 느린 게 아니라 **한 페이지가 그 느린 DB를 20번 넘게
+두드리는 구조**가 문제였다. UI를 아무리 잘 바꿔도(예: 날짜별 리스트를 한 화면에
+쭉 펼치기) 이 쿼리 구조를 안 고치면 여전히 느리다 — 오히려 화면에 한 번에 보여줄
+정보가 늘어나면 쿼리가 더 늘어날 수도 있었다.
+
+### 해결
+
+"요일마다, 사람마다" 따로 조회하던 것을 "방 전체 기준으로 필요한 기간을 한 번에
+조회 → 메모리에서 사람별/날짜별로 나눠 쓰기"로 바꿨다. 마침 `MissionRepository`에
+이미 있던 메서드 하나만 조금 손보면 됐다.
+
+```java
+List<Mission> findByRoomIdAndTargetDateBetweenOrderByTargetDateAscIdAsc(
+        Long roomId, LocalDate start, LocalDate end);
+```
+
+`RoomDashboardController.dashboard()`에서 이 메서드로 **오늘 체크리스트 범위와
+주간 보드 범위를 합친 구간**을 한 번에 가져온 뒤, `Collectors.groupingBy`를 두 번
+중첩해서 `Map<Long memberId, Map<LocalDate, List<Mission>>>` 형태로 메모리에서
+나눈다.
+
+```java
+Map<Long, Map<LocalDate, List<Mission>>> missionsByMember = missionRepository
+        .findByRoomIdAndTargetDateBetweenOrderByTargetDateAscIdAsc(room.getId(), rangeStart, rangeEnd)
+        .stream()
+        .collect(Collectors.groupingBy(Mission::getMemberId, Collectors.groupingBy(Mission::getTargetDate)));
+```
+
+이후 오늘 체크리스트/주간 보드 7칸/날짜 상세/정산 요약까지 전부 이 맵에서
+`getOrDefault(date, List.of())`로 꺼내 쓴다. DB는 한 번도 더 안 두드린다.
+
+부수적으로 두 가지를 같이 정리했다.
+- `memberRepository.findByRoomId(...)`를 컨트롤러 진입부에서 딱 한 번만 호출하고
+  파트너 조회와 정산 로직 양쪽에서 재사용하도록 해서, 중복 호출도 없앴다.
+- `MissionService.myActiveMissions()`/`partnerTodayMissions()`처럼 자체적으로
+  DB를 조회하던 메서드는 `filterActive(List<Mission> candidates, LocalDate today)`로
+  바꿔서, "이미 가져온 목록을 걸러내는 순수 로직"만 남기고 조회 책임은 컨트롤러로
+  옮겼다.
+
+그 결과 페이지 하나당 DB 왕복이 **22번 → 2번**(멤버 목록 1번 + 미션 통짜 조회 1번)으로
+줄었다.
+
+### 검증
+
+```
+.\gradlew.bat test --console=plain
+```
+
+리팩터링 후에도 기존 테스트 14개 전부 통과. 재시작 후 브라우저로 오늘 체크리스트,
+주간 보드 날짜 이동·등록·체크·수정·삭제, 정산 요약까지 리팩터링 전과 완전히 동일하게
+동작하는 것을 확인했다 — 쿼리 구조만 바꿨을 뿐 화면에 보이는 결과는 그대로다.
+
+### 상태
+
+해결 완료. 기능 정확성은 브라우저로 확인 완료. **체감 속도가 실제로 얼마나
+나아졌는지는 정량 측정은 못 했고(이 환경에서 Hibernate 쿼리 로그에 접근할 수 없어서),
+쿼리 왕복이 22번→2번으로 줄었다는 코드상의 사실과 팀원의 체감으로만 판단한다.**

@@ -16,7 +16,9 @@ import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,7 +30,15 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 /**
  * 오늘 체크리스트 + 주간 보드 + 정산 요약을 한 화면(대시보드)으로 합친 컨트롤러.
- * 미션 등록은 주간 보드의 날짜 선택(day)을 통해서만 이루어진다.
+ * 주간 보드는 7일 전부가 항상 펼쳐져 있고(날짜를 클릭해서 리로드하지 않는다), 등록은
+ * 그 날짜 칸의 폼에서 바로 한다. 표의 요일 헤더는 서버 왕복 없는 페이지 내 앵커 링크다.
+ *
+ * 화면에 필요한 미션은 방 전체 기준으로 딱 한 번만 조회한 뒤(findByRoomIdAndTargetDateBetweenOrderByTargetDateAscIdAsc),
+ * memberId -> targetDate로 메모리에서 나눠 쓴다. 예전에는 오늘 체크리스트/주간 보드 7칸×2명/
+ * 정산까지 따로따로 조회해서 페이지 하나에 DB 왕복이 20번 가까이 났는데, 그게 지연이 있는
+ * 무료 DB(Neon)에서 체감 로딩을 느리게 만드는 주범이었다. 지금은 방 통짜 조회 1번 + 멤버
+ * 목록 조회 1번, 총 2번으로 끝난다. 요일별 리스트를 항상 펼쳐두는 것도 이미 가져온 데이터를
+ * 그대로 뿌리는 것뿐이라 쿼리가 추가로 들지 않는다.
  */
 @Controller
 @RequestMapping("/room/{code}")
@@ -54,6 +64,10 @@ public class RoomDashboardController {
                            Integer partnerDone, Integer partnerTotal, boolean future) {
     }
 
+    public record DayList(LocalDate date, String dateLabel, boolean isToday,
+                           List<Mission> myMissions, List<Mission> partnerMissions) {
+    }
+
     public record LateItem(String title, int daysLate, int penaltyWon) {
     }
 
@@ -63,23 +77,39 @@ public class RoomDashboardController {
     @GetMapping
     public String dashboard(@PathVariable String code,
                              @RequestParam(required = false) String start,
-                             @RequestParam(required = false) String day,
                              HttpServletRequest request, Model model) {
         Room room = (Room) request.getAttribute(MemberSessionFilter.CURRENT_ROOM_ATTR);
         Member me = (Member) request.getAttribute(MemberSessionFilter.CURRENT_MEMBER_ATTR);
         LocalDate today = LocalDate.now();
 
-        Optional<Member> partner = memberRepository.findByRoomId(room.getId()).stream()
+        List<Member> members = memberRepository.findByRoomId(room.getId());
+        Optional<Member> partner = members.stream()
                 .filter(member -> !member.getId().equals(me.getId()))
                 .findFirst();
 
-        LocalDate cycleStart = parseOrDefault(start, Cycle.startDate(room.getStartDate(), today));
+        LocalDate todayCycleStart = Cycle.startDate(room.getStartDate(), today);
+        LocalDate todayCycleEnd = Cycle.endDate(room.getStartDate(), today);
+        LocalDate cycleStart = parseOrDefault(start, todayCycleStart);
         LocalDate cycleEnd = cycleStart.plusDays(6);
 
-        addTodayChecklist(room, me, partner, today, model);
-        addWeekGrid(me, partner, cycleStart, today, model);
-        addDaySelection(me, partner, day, model);
-        addSettlement(room, cycleStart, cycleEnd, today, model);
+        // 오늘 체크리스트용 범위와 주간 보드용 범위를 합쳐서 딱 한 번에 다 끌어온다.
+        LocalDate rangeStart = minDate(todayCycleStart, cycleStart);
+        LocalDate rangeEnd = maxDate(today, cycleEnd);
+
+        Map<Long, Map<LocalDate, List<Mission>>> missionsByMember = missionRepository
+                .findByRoomIdAndTargetDateBetweenOrderByTargetDateAscIdAsc(room.getId(), rangeStart, rangeEnd)
+                .stream()
+                .collect(Collectors.groupingBy(Mission::getMemberId, Collectors.groupingBy(Mission::getTargetDate)));
+
+        Map<LocalDate, List<Mission>> myByDate = missionsByMember.getOrDefault(me.getId(), Map.of());
+        Map<LocalDate, List<Mission>> partnerByDate = partner
+                .map(p -> missionsByMember.getOrDefault(p.getId(), Map.of()))
+                .orElse(Map.of());
+
+        addTodayChecklist(today, todayCycleStart, todayCycleEnd, myByDate, partnerByDate, model);
+        addWeekGrid(partner, cycleStart, today, myByDate, partnerByDate, model);
+        addWeekDayLists(cycleStart, today, myByDate, partnerByDate, model);
+        addSettlement(members, cycleStart, cycleEnd, today, missionsByMember, model);
 
         model.addAttribute("room", room);
         model.addAttribute("me", me);
@@ -87,38 +117,37 @@ public class RoomDashboardController {
         return "dashboard";
     }
 
-    private void addTodayChecklist(Room room, Member me, Optional<Member> partner, LocalDate today, Model model) {
-        LocalDate todayCycleStart = Cycle.startDate(room.getStartDate(), today);
-        LocalDate todayCycleEnd = Cycle.endDate(room.getStartDate(), today);
-
-        List<MissionCard> myTodayMissions = missionService.myActiveMissions(me.getId(), todayCycleStart, today).stream()
+    private void addTodayChecklist(LocalDate today, LocalDate todayCycleStart, LocalDate todayCycleEnd,
+                                    Map<LocalDate, List<Mission>> myByDate, Map<LocalDate, List<Mission>> partnerByDate,
+                                    Model model) {
+        List<Mission> candidates = flatten(myByDate, todayCycleStart, today);
+        List<MissionCard> myTodayMissions = missionService.filterActive(candidates, today).stream()
                 .map(m -> new MissionCard(m.getId(), m.getTitle(), m.isDone(),
                         PenaltyCalculator.penaltyFor(m, today, todayCycleEnd)))
                 .toList();
 
-        List<Mission> partnerTodayMissions = partner
-                .map(p -> missionService.partnerTodayMissions(p.getId(), today))
-                .orElse(List.of());
+        List<Mission> partnerTodayMissions = partnerByDate.getOrDefault(today, List.of());
 
         model.addAttribute("myTodayMissions", myTodayMissions);
         model.addAttribute("partnerTodayMissions", partnerTodayMissions);
     }
 
-    private void addWeekGrid(Member me, Optional<Member> partner, LocalDate cycleStart, LocalDate today, Model model) {
+    private void addWeekGrid(Optional<Member> partner, LocalDate cycleStart, LocalDate today,
+                              Map<LocalDate, List<Mission>> myByDate, Map<LocalDate, List<Mission>> partnerByDate,
+                              Model model) {
         List<DayCell> cells = new ArrayList<>();
         for (int i = 0; i < 7; i++) {
             LocalDate date = cycleStart.plusDays(i);
             boolean future = date.isAfter(today);
 
-            List<Mission> myDayMissions = missionRepository.findByMemberIdAndTargetDateOrderByIdAsc(me.getId(), date);
+            List<Mission> myDayMissions = myByDate.getOrDefault(date, List.of());
             int myTotal = myDayMissions.size();
             int myDone = (int) myDayMissions.stream().filter(Mission::isDone).count();
 
             Integer partnerDone = null;
             Integer partnerTotal = null;
             if (partner.isPresent()) {
-                List<Mission> partnerDayMissions =
-                        missionRepository.findByMemberIdAndTargetDateOrderByIdAsc(partner.get().getId(), date);
+                List<Mission> partnerDayMissions = partnerByDate.getOrDefault(date, List.of());
                 partnerTotal = partnerDayMissions.size();
                 partnerDone = (int) partnerDayMissions.stream().filter(Mission::isDone).count();
             }
@@ -136,25 +165,25 @@ public class RoomDashboardController {
         model.addAttribute("cells", cells);
     }
 
-    private void addDaySelection(Member me, Optional<Member> partner, String day, Model model) {
-        LocalDate selectedDay = parseOrDefault(day, null);
-        if (selectedDay == null) {
-            return;
+    private void addWeekDayLists(LocalDate cycleStart, LocalDate today, Map<LocalDate, List<Mission>> myByDate,
+                                  Map<LocalDate, List<Mission>> partnerByDate, Model model) {
+        List<DayList> dayLists = new ArrayList<>();
+        for (int i = 0; i < 7; i++) {
+            LocalDate date = cycleStart.plusDays(i);
+            dayLists.add(new DayList(date, date.format(DATE_LABEL), date.equals(today),
+                    myByDate.getOrDefault(date, List.of()),
+                    partnerByDate.getOrDefault(date, List.of())));
         }
-        model.addAttribute("selectedDay", selectedDay);
-        model.addAttribute("selectedDayLabel", selectedDay.format(DATE_LABEL));
-        model.addAttribute("selectedDayMyMissions",
-                missionRepository.findByMemberIdAndTargetDateOrderByIdAsc(me.getId(), selectedDay));
-        partner.ifPresent(p -> model.addAttribute("selectedDayPartnerMissions",
-                missionRepository.findByMemberIdAndTargetDateOrderByIdAsc(p.getId(), selectedDay)));
+        model.addAttribute("dayLists", dayLists);
     }
 
-    private void addSettlement(Room room, LocalDate cycleStart, LocalDate cycleEnd, LocalDate today, Model model) {
-        List<Member> members = memberRepository.findByRoomId(room.getId());
+    private void addSettlement(List<Member> members, LocalDate cycleStart, LocalDate cycleEnd, LocalDate today,
+                                Map<Long, Map<LocalDate, List<Mission>>> missionsByMember, Model model) {
         boolean hasPartner = members.size() == 2;
 
         List<MemberSettlement> settlements = members.stream()
-                .map(member -> buildSettlement(member, cycleStart, cycleEnd, today))
+                .map(member -> buildSettlement(member, cycleStart, cycleEnd, today,
+                        missionsByMember.getOrDefault(member.getId(), Map.of())))
                 .toList();
 
         int total = settlements.stream().mapToInt(MemberSettlement::total).sum();
@@ -177,9 +206,9 @@ public class RoomDashboardController {
         model.addAttribute("recipientNickname", recipientNickname);
     }
 
-    private MemberSettlement buildSettlement(Member member, LocalDate cycleStart, LocalDate cycleEnd, LocalDate today) {
-        List<Mission> missions = missionRepository
-                .findByMemberIdAndTargetDateBetweenOrderByTargetDateAscIdAsc(member.getId(), cycleStart, cycleEnd);
+    private MemberSettlement buildSettlement(Member member, LocalDate cycleStart, LocalDate cycleEnd, LocalDate today,
+                                              Map<LocalDate, List<Mission>> byDate) {
+        List<Mission> missions = flatten(byDate, cycleStart, cycleEnd);
 
         List<LateItem> lateItems = new ArrayList<>();
         int total = 0;
@@ -195,14 +224,14 @@ public class RoomDashboardController {
 
     @PostMapping("/missions")
     public String addMission(@PathVariable String code,
-                              @RequestParam String start,
+                              @RequestParam(required = false) String start,
                               @RequestParam String day,
                               @RequestParam String title,
                               HttpServletRequest request, RedirectAttributes redirectAttributes) {
         Room room = (Room) request.getAttribute(MemberSessionFilter.CURRENT_ROOM_ATTR);
         Member me = (Member) request.getAttribute(MemberSessionFilter.CURRENT_MEMBER_ATTR);
 
-        String redirectUrl = redirectUrl(code, start, day);
+        String redirectUrl = redirectUrl(code, start);
 
         if (title.isBlank()) {
             redirectAttributes.addFlashAttribute("error", "미션 내용을 입력해주세요.");
@@ -222,7 +251,6 @@ public class RoomDashboardController {
     @PostMapping("/missions/{missionId}/toggle")
     public String toggle(@PathVariable String code, @PathVariable Long missionId,
                           @RequestParam(required = false) String start,
-                          @RequestParam(required = false) String day,
                           HttpServletRequest request, RedirectAttributes redirectAttributes) {
         Member me = (Member) request.getAttribute(MemberSessionFilter.CURRENT_MEMBER_ATTR);
 
@@ -231,20 +259,19 @@ public class RoomDashboardController {
         } catch (MissionAccessDeniedException e) {
             redirectAttributes.addFlashAttribute("error", e.getMessage());
         }
-        return redirectUrl(code, start, day);
+        return redirectUrl(code, start);
     }
 
     @PostMapping("/missions/{missionId}/edit")
     public String edit(@PathVariable String code, @PathVariable Long missionId,
                         @RequestParam String title,
                         @RequestParam(required = false) String start,
-                        @RequestParam(required = false) String day,
                         HttpServletRequest request, RedirectAttributes redirectAttributes) {
         Member me = (Member) request.getAttribute(MemberSessionFilter.CURRENT_MEMBER_ATTR);
 
         if (title.isBlank()) {
             redirectAttributes.addFlashAttribute("error", "미션 내용을 입력해주세요.");
-            return redirectUrl(code, start, day);
+            return redirectUrl(code, start);
         }
 
         try {
@@ -252,13 +279,12 @@ public class RoomDashboardController {
         } catch (MissionAccessDeniedException e) {
             redirectAttributes.addFlashAttribute("error", e.getMessage());
         }
-        return redirectUrl(code, start, day);
+        return redirectUrl(code, start);
     }
 
     @PostMapping("/missions/{missionId}/delete")
     public String delete(@PathVariable String code, @PathVariable Long missionId,
                           @RequestParam(required = false) String start,
-                          @RequestParam(required = false) String day,
                           HttpServletRequest request, RedirectAttributes redirectAttributes) {
         Member me = (Member) request.getAttribute(MemberSessionFilter.CURRENT_MEMBER_ATTR);
 
@@ -267,22 +293,35 @@ public class RoomDashboardController {
         } catch (MissionAccessDeniedException e) {
             redirectAttributes.addFlashAttribute("error", e.getMessage());
         }
-        return redirectUrl(code, start, day);
+        return redirectUrl(code, start);
     }
 
-    private String redirectUrl(String code, String start, String day) {
+    private String redirectUrl(String code, String start) {
         StringBuilder url = new StringBuilder("redirect:/room/").append(code);
         if (start != null) {
             url.append("?start=").append(start);
-            if (day != null) {
-                url.append("&day=").append(day);
-            }
         }
         return url.toString();
     }
 
+    private List<Mission> flatten(Map<LocalDate, List<Mission>> byDate, LocalDate from, LocalDate to) {
+        List<Mission> result = new ArrayList<>();
+        for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
+            result.addAll(byDate.getOrDefault(date, List.of()));
+        }
+        return result;
+    }
+
     private String koreanDayLabel(LocalDate date) {
         return date.getDayOfWeek().getDisplayName(TextStyle.SHORT, Locale.KOREAN);
+    }
+
+    private LocalDate minDate(LocalDate a, LocalDate b) {
+        return a.isBefore(b) ? a : b;
+    }
+
+    private LocalDate maxDate(LocalDate a, LocalDate b) {
+        return a.isAfter(b) ? a : b;
     }
 
     private LocalDate parseOrDefault(String value, LocalDate fallback) {

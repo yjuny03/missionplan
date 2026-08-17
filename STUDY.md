@@ -21,7 +21,7 @@
 |---|---|---|
 | Java | 21 | Spring Boot 4.1 + Java 25 조합은 너무 최신이라 레퍼런스가 적었다. 안정적인 조합(3.5.x + 21)으로 낮췄다 |
 | Spring Boot | 3.5.4 | 위와 동일한 이유 |
-| 화면 | Thymeleaf (서버사이드 렌더링) | 화면이 5장 정도인 소규모 프로젝트에 React 같은 SPA는 과하다. 서버가 HTML을 완성해서 내려주는 방식이 훨씬 단순하다 |
+| 화면 | Thymeleaf (서버사이드 렌더링) | 화면이 몇 장 안 되는(시작/대시보드/캘린더) 소규모 프로젝트에 React 같은 SPA는 과하다. 서버가 HTML을 완성해서 내려주는 방식이 훨씬 단순하다 |
 | DB | PostgreSQL (Neon 무료 티어) | H2 같은 로컬 파일 DB로는 두 사람이 데이터를 공유할 수 없다. Neon은 카드 등록 없이 무료로 쓸 수 있는 클라우드 Postgres다 |
 | 인증 | 초대코드 + 쿠키 + 필터 1개 | Spring Security는 로그인 폼, 권한 체계, CSRF 설정 등 이 프로젝트 규모에 비해 설정할 게 너무 많다. 그냥 랜덤 토큰을 쿠키에 담아 누구인지 식별하는 것으로 충분했다 |
 | CSS | 순수 CSS 1개 파일 (`style.css`) | Bootstrap 같은 프레임워크를 붙이면 클래스 이름 외우는 비용이 더 크다. 화면이 몇 장 안 되니 직접 짜는 게 빠르다 |
@@ -37,14 +37,22 @@ src/main/java/idusw/sb/missionplan/
 ├─ repo/         RoomRepository 등 3개            ← DB 조회만 담당 (Spring Data JPA)
 ├─ settle/       Cycle, PenaltyCalculator         ← 벌금 계산 (순수 함수, 이 프로젝트의 핵심)
 ├─ room/         RoomService, 예외 2개            ← 방 생성/참여 비즈니스 로직
-├─ mission/      MissionService, 예외 1개         ← 미션 추가/체크 비즈니스 로직
-└─ web/          Controller 5개 + 필터 1개        ← HTTP 요청을 받아 서비스를 호출하고 화면을 고름
+├─ mission/      MissionService, 예외 1개         ← 미션 추가/체크/수정/삭제 비즈니스 로직
+└─ web/          Controller 3개 + 필터 1개        ← HTTP 요청을 받아 서비스를 호출하고 화면을 고름
+                 (RoomController, RoomDashboardController, CalendarController)
 
 src/main/resources/
-├─ templates/    home, today, week, calendar, settle, fragments/nav  ← Thymeleaf 화면
+├─ templates/    home, dashboard, calendar,
+│                fragments/nav, fragments/mission-item              ← Thymeleaf 화면
 ├─ static/       style.css
 └─ application.properties                        ← DB 연결, 포트 등 설정
 ```
+
+**컨트롤러가 처음엔 5개였다가 3개로 줄었다.** 원래 오늘/주간/정산 화면을 각각
+TodayController/WeekController/SettleController로 나눴는데, 세 화면을 오가는 게
+불편하다는 피드백을 받고 `RoomDashboardController` 하나로 합쳤다(8-2 참고). 화면
+개수와 컨트롤러 개수가 항상 1:1일 필요는 없다 — 오히려 한 화면에 여러 정보 조각을
+같이 보여줄 땐 컨트롤러도 합쳐야 데이터를 한 번에 모아서 효율적으로 넘길 수 있다.
 
 **계층을 나눈 이유**: Controller가 직접 DB에 접근하거나 벌금을 계산하게 하면, 화면 로직과
 비즈니스 로직이 뒤섞여서 테스트하기 어려워진다. 특히 `settle` 패키지의 계산 로직은
@@ -210,52 +218,107 @@ if (existing != null) {
 `POST /rooms`, `POST /rooms/join`. 여기서 만든 결과를 쿠키에 심는 게 이 컨트롤러의
 유일한 책임이다. 실제 방 생성 로직은 `RoomService`에 위임했다(컨트롤러는 얇게 유지).
 
-### 8-2. TodayController — 오늘 화면 (`/room/{code}`)
+### 8-2. RoomDashboardController — 대시보드 (`/room/{code}`)
 
-가장 설계 고민이 많았던 화면이다. "오늘 화면에 뭘 보여줄까"를 SPEC 문장만으로는
-정할 수 없어서, 미리 만들어둔 UI 목업을 다시 보고 규칙을 정했다:
+가장 많이 갈아엎은 화면이다. 처음엔 오늘/주간/정산을 TodayController·WeekController·
+SettleController로 따로 만들었는데, 실제로 써보니 화면을 오가는 게 불편하다는
+피드백을 받고 컨트롤러 하나로 합쳤다. 이 컨트롤러가 대시보드에 필요한 조각 4개를
+전부 조립한다: 오늘 체크리스트, 주간 요약 표, 요일별 카드 7장, 정산 요약.
+
+**① 오늘 체크리스트 규칙.** SPEC 문장만으로는 "오늘 화면에 뭘 보여줄까"를 정할 수
+없어서, 미리 만들어둔 UI 목업을 다시 보고 규칙을 정했다:
 
 > **이번 주기에서 아직 안 끝난 것 전부 + 오늘 끝낸 것만 보여준다.**
 
 ```java
-public List<Mission> myActiveMissions(Long memberId, LocalDate cycleStart, LocalDate today) {
-    return missionRepository.findByMemberIdAndTargetDateBetweenOrderByTargetDateAscIdAsc(memberId, cycleStart, today)
-            .stream()
+public List<Mission> filterActive(List<Mission> candidates, LocalDate today) {
+    return candidates.stream()
             .filter(m -> !m.isDone() || today.equals(m.getDoneAt()))
+            .sorted(Comparator.comparing(Mission::getTargetDate).thenComparing(Mission::getId))
             .toList();
 }
 ```
 
 그저께 등록한 미션을 아직 안 끝냈으면 오늘도 계속 보인다(밀림 배지와 함께). 어제
 끝낸 건 화면에서 빠지고 주간 보드/캘린더로 넘어간다 — 안 그러면 끝낸 일이 계속
-쌓여서 화면이 길어진다.
+쌓여서 화면이 길어진다. 상대방 영역(`partnerTodayMissions`)은 반대로 **오늘 날짜
+항목만** 단순하게 보여준다. 밀림 배지도 없다 — 매일 압박을 주는 건 "내 미션"으로
+충분하고, 상대방 화면까지 압박용 정보를 넣으면 부담스러워진다는 판단이었다.
 
-상대방 영역(`partnerMissions`)은 반대로 **오늘 날짜 항목만** 단순하게 보여준다.
-밀림 배지도 없다. 매일 압박을 주는 건 "내 미션"으로 충분하고, 상대방 화면까지
-압박용 정보를 넣으면 부담스러워진다는 판단이었다.
+**② 페이지 하나에 쿼리 20번 → 2번.** 처음 구현은 "요일 칸 하나, 상대방 목록 하나"
+단위로 그때그때 DB를 조회했다. 세어보니 대시보드 하나 여는 데 왕복이 22번이었다
+(오늘 체크 2 + 주간표 7일×2명=14 + 정산 3 + 중복 조회 등). Neon처럼 지연 있는
+원격 DB에서는 이것만으로 로딩이 몇 초씩 걸렸다 — 전형적인 N+1 쿼리 문제다
+(자세한 진단 과정은 TROUBLESHOOTING.md #4). "요일마다 따로"가 아니라 **"방 전체를
+한 번에 가져와서 메모리에서 나눠 쓰기"**로 바꿨다.
 
-### 8-3. WeekController — 주간 보드 (`/room/{code}/week`)
+```java
+Map<Long, Map<LocalDate, List<Mission>>> missionsByMember = missionRepository
+        .findByRoomIdAndTargetDateBetweenOrderByTargetDateAscIdAsc(room.getId(), rangeStart, rangeEnd)
+        .stream()
+        .collect(Collectors.groupingBy(Mission::getMemberId, Collectors.groupingBy(Mission::getTargetDate)));
+```
 
-7일 × 2인 그리드를 `List<DayCell>` 하나로 표현했다. 각 셀은 "완료수/전체수"만 담고,
-실제 미션 목록은 담지 않는다 — 14칸에 제목을 다 넣으면 못 읽기 때문(SPEC UI 규칙).
+`Collectors.groupingBy`를 두 번 중첩해서 `멤버 ID → 날짜 → 미션 목록` 구조로
+한 번에 정리한다. 이후 오늘 체크리스트/주간 표/요일 카드/정산까지 전부 이 맵에서
+`getOrDefault(date, List.of())`로 꺼내 쓴다. DB는 한 번도 더 안 두드린다. 쿼리
+22번이 2번(멤버 목록 1 + 미션 통짜 조회 1)으로 줄었다.
 
-날짜를 클릭하면 URL에 `?day=2026-08-19`가 붙고, 그 값이 있을 때만 컨트롤러가
-그 날짜의 상세 목록을 모델에 추가한다. **JS 없이 "펼치기" 기능을 구현한 방법**이
-바로 이거다 — 사실은 펼치는 게 아니라, 같은 페이지를 다른 파라미터로 다시 그리는 것.
+**③ 요일 카드 7장을 클릭 없이 전부 펼친다.** 처음엔 날짜를 클릭해야 그 날짜의
+등록 폼과 목록이 나오는 구조였다(URL에 `?day=2026-08-19`가 붙고, 그 값이 있을 때만
+상세를 모델에 추가). 그런데 한 주 계획을 몰아서 짜려는 사람 입장에선 "클릭 →
+페이지 로딩 → 등록 → 페이지 로딩"을 7번 반복해야 해서 불편했다. ②에서 쿼리를 이미
+다 배치로 가져오고 있었기 때문에, 굳이 한 날짜씩 골라 보여줄 이유가 없다는 걸 깨닫고
+**7일치 카드를 처음부터 다 렌더링**하도록 바꿨다 — 데이터는 이미 메모리에 있으니
+쿼리가 하나도 늘지 않는다.
 
-나중에 "미리 등록하고 싶다"는 요청을 받고, 이 날짜 상세 영역에 등록 폼을 하나
-추가했다. `targetDate`를 항상 오늘로 고정했던 `TodayController`와 달리, 여기서는
-사용자가 고른 날짜(`day` 파라미터)를 그대로 넘긴다:
+```java
+private void addWeekDayLists(LocalDate cycleStart, LocalDate today, Map<LocalDate, List<Mission>> myByDate,
+                              Map<LocalDate, List<Mission>> partnerByDate, Model model) {
+    List<DayList> dayLists = new ArrayList<>();
+    for (int i = 0; i < 7; i++) {
+        LocalDate date = cycleStart.plusDays(i);
+        dayLists.add(new DayList(date, date.format(DATE_LABEL), date.equals(today),
+                myByDate.getOrDefault(date, List.of()),
+                partnerByDate.getOrDefault(date, List.of())));
+    }
+    model.addAttribute("dayLists", dayLists);
+}
+```
+
+위쪽 요약 표(완료수/전체수)의 요일 헤더는 이제 서버에 아무것도 안 물어보는
+**페이지 내 앵커 링크**로 바꿨다 — `<a href="#day-2026-08-19">`. 클릭하면 그
+카드로 스크롤만 이동하고 네트워크 요청이 아예 없다.
 
 ```java
 missionService.addMission(room.getId(), me.getId(), targetDate, title.trim());
 ```
 
-`MissionService.addMission()`은 애초에 날짜를 파라미터로 받게 만들어뒀기 때문에
-이 기능을 추가할 때 그 메서드는 한 글자도 안 고쳤다 — 처음부터 "오늘 전용"으로
-좁게 만들지 않은 덕이다.
+`MissionService.addMission()`은 처음부터 날짜를 파라미터로 받게 만들어뒀기 때문에,
+"오늘 전용 등록"에서 "아무 날짜나 등록"으로, 다시 "요일 카드 7개 각각 등록"으로
+용도가 바뀌는 동안 이 메서드는 한 글자도 안 고쳤다 — 처음부터 좁게 만들지 않은 덕이다.
 
-### 8-4. CalendarController — 캘린더 (`/room/{code}/calendar`)
+**④ 정산 요약.** 각 멤버의 그 주기 미션을 순회하며 `PenaltyCalculator.penaltyFor()`를
+그대로 합산한다. 새로운 계산 로직이 없다 — 이미 검증된 함수를 여러 번 부르는 것뿐이다.
+
+```java
+int total = 0;
+for (Mission mission : missions) {
+    int penalty = PenaltyCalculator.penaltyFor(mission, today, cycleEnd);
+    total += penalty;
+    if (penalty > 0) lateItems.add(new LateItem(mission.getTitle(), penalty / 1000, penalty));
+}
+```
+
+수령자 결정도 단순 비교다: `총액이 더 적은 쪽이 수령`, 같으면 `tie = true`. 원래
+목업은 "내 내역"만 보여줬는데, SPEC의 "금액만 보여주면 서로 납득이 안 된다"는
+문장을 다시 읽고 **양쪽 다 항목별 내역을 보여주는 쪽으로 바꿨다.** 최종 정산에서
+"왜 내가 8천원인지" 상대방이 확인할 수 있어야 다툼이 안 생긴다고 판단했다. 이
+패널은 대시보드에서 **화면에 보이는 주기(week)와 연동**된다 — 주간 표에서 "이전
+주"로 넘기면 정산 숫자도 그 주 걸로 바뀐다. 항상 "지금 보고 있는 것 = 정산 숫자"가
+되도록 같은 `cycleStart`/`cycleEnd`를 공유해서 계산한다.
+
+### 8-3. CalendarController — 캘린더 (`/room/{code}/calendar`)
 
 한 달치 날짜 그리드를 만들고, 각 날짜에 "완료(done) / 미완료(late) / 없음(none)"
 셋 중 하나를 매긴다.
@@ -277,26 +340,6 @@ private String statusFor(LocalDate date, LocalDate today, List<Mission> missions
 (`leadingBlanks`), 7의 배수가 될 때까지 뒤에도 빈 칸을 채운 다음, 7개씩
 끊어서(`weeks`) 표를 그린다. Thymeleaf 안에서 이 계산을 하면 복잡해지므로,
 컨트롤러에서 미리 `List<List<DayCell>>`로 다 만들어서 넘긴다.
-
-### 8-5. SettleController — 정산 (`/room/{code}/settle`)
-
-각 멤버의 그 주기 미션을 순회하며 `PenaltyCalculator.penaltyFor()`를 그대로 합산한다.
-새로운 계산 로직이 없다 — 이미 검증된 함수를 여러 번 부르는 것뿐이다.
-
-```java
-int total = 0;
-for (Mission mission : missions) {
-    int penalty = PenaltyCalculator.penaltyFor(mission, today, cycleEnd);
-    total += penalty;
-    if (penalty > 0) lateItems.add(new LateItem(mission.getTitle(), penalty / 1000, penalty));
-}
-```
-
-수령자 결정도 단순 비교다: `총액이 더 적은 쪽이 수령`, 같으면 `tie = true`.
-
-원래 목업은 "내 내역"만 보여줬는데, SPEC의 "금액만 보여주면 서로 납득이 안 된다"는
-문장을 다시 읽고 **양쪽 다 항목별 내역을 보여주는 쪽으로 바꿨다.** 최종 정산에서
-"왜 내가 8천원인지" 상대방이 확인할 수 있어야 다툼이 안 생긴다고 판단했다.
 
 ---
 
@@ -321,17 +364,26 @@ for (Mission mission : missions) {
 
 ### 프래그먼트로 중복 제거
 
-4개 화면(오늘/주간/캘린더/정산)에 똑같이 들어가는 상단 탭 메뉴를
+대시보드/캘린더 화면에 똑같이 들어가는 상단 탭 메뉴를
 [fragments/nav.html](src/main/resources/templates/fragments/nav.html) 하나로 빼고,
 각 화면에서 이렇게 불러 쓴다.
 
 ```html
-<div th:replace="~{fragments/nav :: nav(${room.inviteCode})}"></div>
+<div th:replace="~{fragments/nav :: nav(${room.inviteCode}, 'dashboard')}"></div>
 ```
 
 Thymeleaf의 fragment는 "재사용 가능한 HTML 조각에 이름을 붙이는 기능"이다.
-`nav(code)`처럼 파라미터도 받을 수 있어서, 마치 함수처럼 각 화면에서 자기
-`room.inviteCode`를 넘겨 링크를 만든다.
+`nav(code, active)`처럼 파라미터도 받을 수 있어서, 마치 함수처럼 각 화면에서 자기
+`room.inviteCode`와 "지금 이 화면이 어디인지"(`'dashboard'` 또는 `'calendar'`)를
+넘긴다. `active`로 지금 보고 있는 탭에 `class="active"`를 붙여서 색을 채운다.
+
+같은 방식으로 [fragments/mission-item.html](src/main/resources/templates/fragments/mission-item.html)도
+만들었다. 미션 한 줄마다 붙는 완료/수정/삭제 버튼 3종 세트를 오늘 체크리스트와
+주간 보드의 요일 카드 양쪽에서 똑같이 써야 했는데, 마크업을 두 번 베껴 쓰는 대신
+`actions(mission, code, start)` 프래그먼트 하나로 빼서 양쪽에서 호출한다.
+수정/삭제는 JS 없이 `<details>`/`<summary>` 태그로 구현했다 — 클릭하면 브라우저가
+알아서 펼치고 접어주는 HTML 표준 기능이라, "삭제 누르면 확인 버튼이 한 번 더
+뜨는" 동작을 자바스크립트 한 줄 없이 만들 수 있다.
 
 ### 에러 메시지 전달 (Flash Attribute)
 
@@ -419,7 +471,7 @@ main 리소스보다 우선순위가 높아서**, 테스트를 돌릴 때는 이
 
 ---
 
-## 12. 겪었던 문제 3가지 (요약)
+## 12. 겪었던 문제 4가지 (요약)
 
 자세한 원인·해결 과정은 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 참고.
 
@@ -429,9 +481,13 @@ main 리소스보다 우선순위가 높아서**, 테스트를 돌릴 때는 이
    세션을 URL이 아닌 쿠키로만 추적하게 해서 해결
 3. **쿠키를 잃은 멤버가 방에 영영 재접속 못함** → 참여 로직에 "같은 닉네임이면 재접속으로
    처리" 분기 추가 (7번 항목의 reissue 로직)
+4. **대시보드 페이지 하나에 DB 왕복이 22번** → 팀원이 "느리다"고 보고한 걸 그냥 넘기지
+   않고 코드로 직접 세어봐서 원인을 확정했다. 요일·사람별로 따로 조회하던 걸 방 전체
+   기준 조회 1번으로 합치고 메모리에서 나눠 써서 2번으로 줄임 (8-2 항목)
 
-세 가지 다 "브라우저로 실제 시나리오를 눌러봐야만 발견되는" 종류의 문제였다.
-컴파일이 되고 단위 테스트가 통과해도 실제 동작은 다를 수 있다는 걸 보여주는 사례들이다.
+네 가지 다 "브라우저로 실제 시나리오를 눌러봐야만(또는 실사용해봐야만) 발견되는"
+종류의 문제였다. 컴파일이 되고 단위 테스트가 통과해도 실제 동작·성능은 다를 수
+있다는 걸 보여주는 사례들이다.
 
 ---
 
@@ -446,8 +502,14 @@ A. 아이디/비밀번호 없이, 방 참여할 때 랜덤 토큰을 쿠키에 �
    Spring Security는 이 정도 규모엔 과해서 필터 하나로 직접 짰어요.
 
 **Q. 왜 React 안 쓰고 Thymeleaf예요?**
-A. 화면이 5장 정도라 서버가 완성된 HTML을 내려주는 게 더 단순해요. 상호작용도
+A. 화면이 몇 장 안 돼서 서버가 완성된 HTML을 내려주는 게 더 단순해요. 상호작용도
    전부 폼 제출(새로고침)로 처리해서 프론트-백엔드 상태 불일치 문제가 아예 없어요.
+
+**Q. 로딩이 느렸다면서요? 어떻게 고쳤어요?**
+A. 페이지 하나 열 때 DB를 22번 왕복하고 있었어요. 요일 칸 하나, 사람 한 명마다
+   따로따로 조회했거든요. 방 전체 데이터를 한 번에 가져와서 자바 코드로 메모리에서
+   나눠 쓰는 방식으로 바꿔서 2번으로 줄였어요. "무료 DB라 느리다"가 아니라 "그 DB를
+   너무 많이 두드리는 코드"가 진짜 원인이었던 거죠.
 
 **Q. 팀원이랑 어떻게 데이터를 공유해요?**
 A. 앱은 각자 자기 컴퓨터에서 실행하고, DB만 인터넷에 있는 무료 Postgres(Neon)를
