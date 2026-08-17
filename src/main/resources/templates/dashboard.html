@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title th:text="${room.name}">대시보드</title>
+    <link rel="stylesheet" th:href="@{/style.css}">
+</head>
+<body>
+<h1 th:text="${room.name}"></h1>
+<p class="invite-code">초대코드: <strong th:text="${room.inviteCode}"></strong> (팀원에게 이 코드를 전달하세요)</p>
+
+<div th:replace="~{fragments/nav :: nav(${room.inviteCode}, 'dashboard')}"></div>
+
+<p th:if="${error}" th:text="${error}" class="error"></p>
+
+<div class="dashboard-layout">
+    <main class="dashboard-main">
+
+        <section class="accent-green">
+            <h2>오늘 할 일</h2>
+            <ul>
+                <li th:each="mission : ${myTodayMissions}"
+                    th:classappend="${mission.done} ? 'mission-done' : (${mission.penaltyWon > 0} ? 'mission-late' : '')">
+                    <form th:action="@{/room/{code}/missions/{id}/toggle(code=${room.inviteCode},id=${mission.id})}"
+                          method="post" style="display:inline">
+                        <button type="submit" th:classappend="${mission.done} ? 'btn-undo' : 'btn-done'"
+                                th:text="${mission.done} ? '완료 취소' : '완료로 표시'"></button>
+                    </form>
+                    <span class="mission-title" th:classappend="${mission.done} ? 'done' : ''"
+                          th:text="${mission.title}"></span>
+                    <span th:if="${mission.penaltyWon > 0}" class="penalty-badge"
+                          th:text="${mission.penaltyWon / 1000} + '일 밀림 · ' + ${mission.penaltyWon} + '원'"></span>
+                </li>
+                <li th:if="${#lists.isEmpty(myTodayMissions)}">할 일이 없습니다. 아래 주간 보드에서 등록해보세요.</li>
+            </ul>
+
+            <div th:if="${partner != null}">
+                <h3 th:text="${partner.nickname} + '님 오늘 현황'"></h3>
+                <ul>
+                    <li th:each="mission : ${partnerTodayMissions}"
+                        th:classappend="${mission.done} ? 'mission-done' : ''">
+                        <input type="checkbox" th:checked="${mission.done}" disabled>
+                        <span class="mission-title" th:classappend="${mission.done} ? 'done' : ''"
+                              th:text="${mission.title}"></span>
+                    </li>
+                    <li th:if="${#lists.isEmpty(partnerTodayMissions)}">아직 등록한 미션이 없습니다.</li>
+                </ul>
+            </div>
+            <p th:if="${partner == null}">아직 팀원이 참여하지 않았습니다. 위 초대코드를 전달해보세요.</p>
+        </section>
+
+        <section class="accent-blue">
+            <h2>주간 보드</h2>
+            <div class="cycle-nav">
+                <a th:href="@{/room/{code}(code=${room.inviteCode}, start=${prevStart})}">이전 주</a>
+                <span th:text="${cycleStartLabel} + ' ~ ' + ${cycleEndLabel}"></span>
+                <a th:href="@{/room/{code}(code=${room.inviteCode}, start=${nextStart})}">다음 주</a>
+            </div>
+
+            <table>
+                <tr>
+                    <td></td>
+                    <td th:each="cell : ${cells}">
+                        <a th:href="@{/room/{code}(code=${room.inviteCode}, start=${cycleStart}, day=${cell.date})}"
+                           th:text="${cell.dayLabel}"></a>
+                    </td>
+                </tr>
+                <tr>
+                    <td th:text="${me.nickname}"></td>
+                    <td th:each="cell : ${cells}">
+                        <span th:if="${!cell.future}" th:text="${cell.myDone} + '/' + ${cell.myTotal}"></span>
+                        <span th:if="${cell.future}">–</span>
+                    </td>
+                </tr>
+                <tr th:if="${partner != null}">
+                    <td th:text="${partner.nickname}"></td>
+                    <td th:each="cell : ${cells}">
+                        <span th:if="${!cell.future}" th:text="${cell.partnerDone} + '/' + ${cell.partnerTotal}"></span>
+                        <span th:if="${cell.future}">–</span>
+                    </td>
+                </tr>
+            </table>
+
+            <div th:if="${selectedDay != null}" class="day-detail">
+                <h3 th:text="${selectedDayLabel}"></h3>
+
+                <h4 th:text="${me.nickname}"></h4>
+                <form id="mission-title-form" th:action="@{/room/{code}/missions(code=${room.inviteCode})}"
+                      method="post">
+                    <input type="hidden" name="start" th:value="${cycleStart}">
+                    <input type="hidden" name="day" th:value="${selectedDay}">
+                    <input type="text" name="title" placeholder="이 날짜에 미션 추가" required>
+                    <button type="submit" class="btn-primary">추가</button>
+                </form>
+                <ul>
+                    <li th:each="mission : ${selectedDayMyMissions}"
+                        th:classappend="${mission.done} ? 'mission-done' : ''">
+                        <form th:action="@{/room/{code}/missions/{id}/toggle(code=${room.inviteCode},id=${mission.id})}"
+                              method="post" style="display:inline">
+                            <input type="hidden" name="start" th:value="${cycleStart}">
+                            <input type="hidden" name="day" th:value="${selectedDay}">
+                            <button type="submit" th:classappend="${mission.done} ? 'btn-undo' : 'btn-done'"
+                                    th:text="${mission.done} ? '완료 취소' : '완료로 표시'"></button>
+                        </form>
+                        <span class="mission-title" th:classappend="${mission.done} ? 'done' : ''"
+                              th:text="${mission.title}"></span>
+                    </li>
+                    <li th:if="${#lists.isEmpty(selectedDayMyMissions)}">등록된 미션이 없습니다.</li>
+                </ul>
+
+                <div th:if="${partner != null}">
+                    <h4 th:text="${partner.nickname}"></h4>
+                    <ul>
+                        <li th:each="mission : ${selectedDayPartnerMissions}"
+                            th:classappend="${mission.done} ? 'mission-done' : ''">
+                            <input type="checkbox" th:checked="${mission.done}" disabled>
+                            <span class="mission-title" th:classappend="${mission.done} ? 'done' : ''"
+                                  th:text="${mission.title}"></span>
+                        </li>
+                        <li th:if="${#lists.isEmpty(selectedDayPartnerMissions)}">등록된 미션이 없습니다.</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <aside class="dashboard-side">
+        <section class="settlement-panel accent-amber">
+            <h2>정산 현황</h2>
+            <p class="cycle-label" th:text="${cycleStartLabel} + ' ~ ' + ${cycleEndLabel}"></p>
+
+            <p th:if="${!hasPartner}">아직 팀원이 없습니다.</p>
+
+            <div th:if="${hasPartner}">
+                <div class="settlement-summary">
+                    <div class="settlement-card" th:each="s : ${settlements}">
+                        <div th:text="${s.nickname}"></div>
+                        <div class="amount" th:text="${s.total} + '원'"></div>
+                    </div>
+                </div>
+
+                <p class="settlement-result tie" th:if="${tie}">동률 — 각자 회수</p>
+                <p class="settlement-result win" th:if="${!tie}"
+                   th:text="${recipientNickname} + ' 수령 (' + ${settleTotal} + '원)'"></p>
+
+                <div th:each="s : ${settlements}">
+                    <h4 th:text="${s.nickname}"></h4>
+                    <ul>
+                        <li th:each="item : ${s.lateItems}" class="mission-late">
+                            <span th:text="${item.title}"></span>
+                            <span class="penalty-badge"
+                                  th:text="${item.daysLate} + '일 · ' + ${item.penaltyWon} + '원'"></span>
+                        </li>
+                        <li th:if="${#lists.isEmpty(s.lateItems)}">밀린 항목 없음</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+    </aside>
+</div>
+</body>
+</html>

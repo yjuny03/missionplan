@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
 <body>
-<nav th:fragment="nav(code)" class="room-nav">
-    <a th:href="@{/room/{code}(code=${code})}">오늘</a>
-    <a th:href="@{/room/{code}/week(code=${code})}">주간</a>
-    <a th:href="@{/room/{code}/calendar(code=${code})}">캘린더</a>
-    <a th:href="@{/room/{code}/settle(code=${code})}">정산</a>
+<nav th:fragment="nav(code, active)" class="room-nav">
+    <a th:href="@{/room/{code}(code=${code})}"
+       th:classappend="${active == 'dashboard'} ? 'active' : ''">대시보드</a>
+    <a th:href="@{/room/{code}/calendar(code=${code})}"
+       th:classappend="${active == 'calendar'} ? 'active' : ''">캘린더</a>
 </nav>
 </body>
 </html>

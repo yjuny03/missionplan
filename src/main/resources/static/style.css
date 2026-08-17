@@ -3,12 +3,26 @@
     --text-muted: #888;
     --text-danger: #c0392b;
     --bg-danger: #fdecea;
+    --border-danger: #f0c4bd;
     --border: #ddd;
     --border-strong: #bbb;
     --surface: #fff;
     --surface-alt: #f3f4f1;
+
     --accent: #2f6f4e;
     --accent-dark: #21543a;
+    --bg-accent: #e6f2ec;
+    --border-accent: #bfdccd;
+
+    --info: #2c6fa8;
+    --info-dark: #204f79;
+    --bg-info: #e8f1f8;
+    --border-info: #bcd7ea;
+
+    --money: #b7791f;
+    --money-dark: #8a5a13;
+    --bg-money: #fdf3e0;
+    --border-money: #f0d9a8;
 }
 
 * {
@@ -19,7 +33,7 @@ body {
     font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
     color: var(--text);
     background: var(--surface-alt);
-    max-width: 640px;
+    max-width: 960px;
     margin: 0 auto;
     padding: 24px 16px 64px;
     line-height: 1.6;
@@ -32,7 +46,7 @@ h1 {
 
 h2 {
     font-size: 17px;
-    margin: 24px 0 8px;
+    margin: 0 0 12px;
 }
 
 h3 {
@@ -50,7 +64,7 @@ a:hover {
     text-decoration: underline;
 }
 
-/* 방 화면 상단 4개 탭 (오늘/주간/캘린더/정산) */
+/* 상단 탭 (대시보드/캘린더) */
 .room-nav {
     display: flex;
     gap: 8px;
@@ -65,6 +79,7 @@ a:hover {
     border-radius: 20px;
     background: var(--surface);
     font-size: 14px;
+    font-weight: 500;
     color: var(--text);
     transition: background .15s, border-color .15s, color .15s;
 }
@@ -76,6 +91,12 @@ a:hover {
     text-decoration: none;
 }
 
+.room-nav a.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
 .invite-code {
     color: var(--text-muted);
     font-size: 14px;
@@ -84,7 +105,7 @@ a:hover {
 .error {
     color: var(--text-danger);
     background: var(--bg-danger);
-    border: 1px solid #f0c4bd;
+    border: 1px solid var(--border-danger);
     padding: 8px 12px;
     border-radius: 6px;
     margin: 12px 0;
@@ -93,9 +114,36 @@ a:hover {
 section {
     background: var(--surface);
     border: 1px solid var(--border);
+    border-top: 3px solid var(--border-strong);
     border-radius: 10px;
-    padding: 16px 20px;
+    padding: 18px 20px;
     margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+/* 섹션 강조 색 — 오늘 할 일(초록) / 주간 보드(파랑) / 정산(금색) */
+section.accent-green {
+    border-top-color: var(--accent);
+}
+
+section.accent-green > h2 {
+    color: var(--accent-dark);
+}
+
+section.accent-blue {
+    border-top-color: var(--info);
+}
+
+section.accent-blue > h2 {
+    color: var(--info-dark);
+}
+
+section.accent-amber {
+    border-top-color: var(--money);
+}
+
+section.accent-amber > h2 {
+    color: var(--money-dark);
 }
 
 form {
@@ -125,7 +173,7 @@ input[type="text"] {
 input[type="text"]:focus {
     outline: none;
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(47, 111, 78, 0.15);
+    box-shadow: 0 0 0 3px var(--bg-accent);
 }
 
 /* "미션 내용 [입력] [추가]" 처럼 한 줄로 붙는 폼 */
@@ -150,7 +198,8 @@ button {
     color: var(--text);
     cursor: pointer;
     font-size: 14px;
-    transition: background .15s, border-color .15s, transform .05s;
+    font-weight: 500;
+    transition: background .15s, border-color .15s, transform .05s, box-shadow .15s;
 }
 
 button:hover {
@@ -171,8 +220,10 @@ button:active {
 .btn-primary:hover {
     background: var(--accent-dark);
     border-color: var(--accent-dark);
+    box-shadow: 0 2px 6px rgba(47, 111, 78, 0.3);
 }
 
+/* 완료로 표시 — 초록 */
 .btn-done {
     background: var(--accent);
     border-color: var(--accent);
@@ -182,10 +233,21 @@ button:active {
 .btn-done:hover {
     background: var(--accent-dark);
     border-color: var(--accent-dark);
+    box-shadow: 0 2px 6px rgba(47, 111, 78, 0.3);
 }
 
+/* 완료 취소 — 빨강. "되돌리는" 동작이라는 걸 색으로 바로 알 수 있게 */
 .btn-undo {
-    color: var(--text-muted);
+    background: var(--bg-danger);
+    border-color: var(--border-danger);
+    color: var(--text-danger);
+}
+
+.btn-undo:hover {
+    background: var(--text-danger);
+    border-color: var(--text-danger);
+    color: #fff;
+    box-shadow: 0 2px 6px rgba(192, 57, 43, 0.3);
 }
 
 ul {
@@ -195,12 +257,14 @@ ul {
 }
 
 li {
-    padding: 10px 4px;
+    padding: 10px 10px;
     border-bottom: 1px solid var(--border);
+    border-left: 3px solid transparent;
     display: flex;
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+    border-radius: 4px;
     transition: background .1s;
 }
 
@@ -212,6 +276,18 @@ li:last-child {
     border-bottom: none;
 }
 
+/* 완료된 항목: 초록 왼쪽 띠 + 은은한 초록 배경 */
+li.mission-done {
+    border-left-color: var(--accent);
+    background: var(--bg-accent);
+}
+
+/* 밀린(미완료) 항목: 빨강 왼쪽 띠 + 은은한 빨강 배경 */
+li.mission-late {
+    border-left-color: var(--text-danger);
+    background: var(--bg-danger);
+}
+
 .mission-title.done {
     color: var(--text-muted);
     text-decoration: line-through;
@@ -219,10 +295,12 @@ li:last-child {
 
 .penalty-badge {
     color: var(--text-danger);
-    background: var(--bg-danger);
+    background: #fff;
+    border: 1px solid var(--border-danger);
     padding: 2px 8px;
     border-radius: 10px;
     font-size: 12px;
+    font-weight: 600;
     white-space: nowrap;
 }
 
@@ -253,11 +331,12 @@ table a {
     display: inline-block;
     padding: 3px 10px;
     border-radius: 6px;
+    font-weight: 500;
     transition: background .15s, color .15s;
 }
 
 table a:hover {
-    background: var(--accent);
+    background: var(--info);
     color: #fff;
     text-decoration: none;
 }
@@ -270,17 +349,22 @@ table a:hover {
     font-size: 14px;
 }
 
+.cycle-nav span {
+    font-weight: 600;
+}
+
 .cycle-nav a {
     padding: 6px 14px;
     border: 1px solid var(--border);
     border-radius: 6px;
     background: var(--surface);
+    font-weight: 500;
     transition: background .15s, border-color .15s, color .15s;
 }
 
 .cycle-nav a:hover {
-    background: var(--accent);
-    border-color: var(--accent);
+    background: var(--info);
+    border-color: var(--info);
     color: #fff;
     text-decoration: none;
 }
@@ -290,6 +374,7 @@ table a:hover {
     font-size: 12px;
     display: block;
     margin-top: 2px;
+    font-weight: 600;
 }
 
 .day-status-done {
@@ -303,6 +388,12 @@ table a:hover {
 .day-status-done::before,
 .day-status-late::before {
     content: "● ";
+}
+
+.day-detail {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
 }
 
 /* 정산 요약 카드 */
@@ -324,15 +415,105 @@ table a:hover {
 
 .settlement-card .amount {
     font-size: 20px;
-    font-weight: 600;
+    font-weight: 700;
 }
 
 .settlement-result {
     font-size: 15px;
-    font-weight: 600;
+    font-weight: 700;
     padding: 10px 14px;
-    background: var(--surface);
-    border: 1px solid var(--border);
     border-radius: 8px;
     margin: 12px 0;
+}
+
+.settlement-result.win {
+    background: var(--bg-money);
+    border: 1px solid var(--border-money);
+    color: var(--money-dark);
+}
+
+.settlement-result.tie {
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+}
+
+/* 대시보드: 본문(오늘 체크리스트 + 주간 보드) + 오른쪽 정산 사이드바 */
+.dashboard-layout {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.dashboard-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.dashboard-side {
+    width: 260px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 20px;
+}
+
+/* 정산 사이드바는 본문보다 한 단계 작고 조밀하게 */
+.settlement-panel {
+    padding: 14px 16px;
+}
+
+.settlement-panel h2 {
+    font-size: 15px;
+    margin: 0 0 4px;
+}
+
+.settlement-panel h4 {
+    font-size: 13px;
+    margin: 14px 0 4px;
+    color: var(--text-muted);
+}
+
+.settlement-panel .cycle-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 0 0 10px;
+}
+
+.settlement-panel .settlement-summary {
+    flex-direction: column;
+    gap: 8px;
+    margin: 0 0 10px;
+}
+
+.settlement-panel .settlement-card {
+    padding: 8px 12px;
+}
+
+.settlement-panel .settlement-card .amount {
+    font-size: 16px;
+}
+
+.settlement-panel .settlement-result {
+    font-size: 13px;
+    padding: 8px 10px;
+}
+
+.settlement-panel li {
+    padding: 4px 6px;
+    font-size: 13px;
+}
+
+.settlement-panel .penalty-badge {
+    font-size: 11px;
+}
+
+@media (max-width: 760px) {
+    .dashboard-layout {
+        flex-direction: column;
+    }
+
+    .dashboard-side {
+        width: 100%;
+        position: static;
+    }
 }

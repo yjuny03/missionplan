@@ -10,7 +10,7 @@
 
 <p th:if="${error}" th:text="${error}" class="error"></p>
 
-<section>
+<section class="accent-green">
     <h2>방 만들기</h2>
     <form th:action="@{/rooms}" method="post">
         <label>방 이름 <input type="text" name="roomName" required></label>
@@ -19,7 +19,7 @@
     </form>
 </section>
 
-<section>
+<section class="accent-blue">
     <h2>초대코드로 참여</h2>
     <form th:action="@{/rooms/join}" method="post">
         <label>초대코드 <input type="text" name="inviteCode" required></label>

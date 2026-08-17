@@ -8,59 +8,62 @@
 <body>
 <h1 th:text="${room.name}"></h1>
 
-<div th:replace="~{fragments/nav :: nav(${room.inviteCode})}"></div>
+<div th:replace="~{fragments/nav :: nav(${room.inviteCode}, 'calendar')}"></div>
 
-<div class="cycle-nav">
-    <a th:href="@{/room/{code}/calendar(code=${room.inviteCode}, month=${prevMonth})}">이전 달</a>
-    <span th:text="${yearMonth}"></span>
-    <a th:href="@{/room/{code}/calendar(code=${room.inviteCode}, month=${nextMonth})}">다음 달</a>
-</div>
+<section class="accent-blue">
+    <div class="cycle-nav">
+        <a th:href="@{/room/{code}/calendar(code=${room.inviteCode}, month=${prevMonth})}">이전 달</a>
+        <span th:text="${yearMonth}"></span>
+        <a th:href="@{/room/{code}/calendar(code=${room.inviteCode}, month=${nextMonth})}">다음 달</a>
+    </div>
 
-<table>
-    <tr>
-        <td>월</td>
-        <td>화</td>
-        <td>수</td>
-        <td>목</td>
-        <td>금</td>
-        <td>토</td>
-        <td>일</td>
-    </tr>
-    <tr th:each="week : ${weeks}">
-        <td th:each="cell : ${week}">
-            <a th:if="${cell.date != null}"
-               th:href="@{/room/{code}/calendar(code=${room.inviteCode}, month=${yearMonth}, day=${cell.date})}"
-               th:text="${cell.date.dayOfMonth}"></a>
-            <span th:if="${cell.status == 'done'}" class="day-status-done">완료</span>
-            <span th:if="${cell.status == 'late'}" class="day-status-late">미완료</span>
-        </td>
-    </tr>
-</table>
+    <table>
+        <tr>
+            <td>월</td>
+            <td>화</td>
+            <td>수</td>
+            <td>목</td>
+            <td>금</td>
+            <td>토</td>
+            <td>일</td>
+        </tr>
+        <tr th:each="week : ${weeks}">
+            <td th:each="cell : ${week}">
+                <a th:if="${cell.date != null}"
+                   th:href="@{/room/{code}/calendar(code=${room.inviteCode}, month=${yearMonth}, day=${cell.date})}"
+                   th:text="${cell.date.dayOfMonth}"></a>
+                <span th:if="${cell.status == 'done'}" class="day-status-done">완료</span>
+                <span th:if="${cell.status == 'late'}" class="day-status-late">미완료</span>
+            </td>
+        </tr>
+    </table>
 
-<div th:if="${selectedDay != null}">
-    <h2 th:text="${selectedDay}"></h2>
+    <div th:if="${selectedDay != null}" class="day-detail">
+        <h3 th:text="${selectedDayLabel}"></h3>
 
-    <h3 th:text="${me.nickname}"></h3>
-    <ul>
-        <li th:each="mission : ${selectedDayMyMissions}">
-            <input type="checkbox" th:checked="${mission.done}" disabled>
-            <span class="mission-title" th:classappend="${mission.done} ? 'done' : ''"
-                  th:text="${mission.title}"></span>
-        </li>
-        <li th:if="${#lists.isEmpty(selectedDayMyMissions)}">등록된 미션이 없습니다.</li>
-    </ul>
-
-    <div th:if="${partner != null}">
-        <h3 th:text="${partner.nickname}"></h3>
+        <h4 th:text="${me.nickname}"></h4>
         <ul>
-            <li th:each="mission : ${selectedDayPartnerMissions}">
+            <li th:each="mission : ${selectedDayMyMissions}" th:classappend="${mission.done} ? 'mission-done' : ''">
                 <input type="checkbox" th:checked="${mission.done}" disabled>
                 <span class="mission-title" th:classappend="${mission.done} ? 'done' : ''"
                       th:text="${mission.title}"></span>
             </li>
-            <li th:if="${#lists.isEmpty(selectedDayPartnerMissions)}">등록된 미션이 없습니다.</li>
+            <li th:if="${#lists.isEmpty(selectedDayMyMissions)}">등록된 미션이 없습니다.</li>
         </ul>
+
+        <div th:if="${partner != null}">
+            <h4 th:text="${partner.nickname}"></h4>
+            <ul>
+                <li th:each="mission : ${selectedDayPartnerMissions}"
+                    th:classappend="${mission.done} ? 'mission-done' : ''">
+                    <input type="checkbox" th:checked="${mission.done}" disabled>
+                    <span class="mission-title" th:classappend="${mission.done} ? 'done' : ''"
+                          th:text="${mission.title}"></span>
+                </li>
+                <li th:if="${#lists.isEmpty(selectedDayPartnerMissions)}">등록된 미션이 없습니다.</li>
+            </ul>
+        </div>
     </div>
-</div>
+</section>
 </body>
 </html>

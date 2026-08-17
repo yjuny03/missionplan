@@ -8,8 +8,10 @@ import idusw.sb.missionplan.repo.MissionRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -23,6 +25,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 @Controller
 @RequestMapping("/room/{code}/calendar")
 public class CalendarController {
+
+    private static final DateTimeFormatter DATE_LABEL = DateTimeFormatter.ofPattern("M/d(E)", Locale.KOREAN);
 
     private final MemberRepository memberRepository;
     private final MissionRepository missionRepository;
@@ -87,6 +91,7 @@ public class CalendarController {
         LocalDate selectedDay = parseDateOrDefault(day, null);
         if (selectedDay != null) {
             model.addAttribute("selectedDay", selectedDay);
+            model.addAttribute("selectedDayLabel", selectedDay.format(DATE_LABEL));
             model.addAttribute("selectedDayMyMissions",
                     missionRepository.findByMemberIdAndTargetDateOrderByIdAsc(me.getId(), selectedDay));
             partner.ifPresent(p -> model.addAttribute("selectedDayPartnerMissions",
