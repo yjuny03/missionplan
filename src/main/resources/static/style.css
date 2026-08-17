@@ -1,0 +1,338 @@
+:root {
+    --text: #222;
+    --text-muted: #888;
+    --text-danger: #c0392b;
+    --bg-danger: #fdecea;
+    --border: #ddd;
+    --border-strong: #bbb;
+    --surface: #fff;
+    --surface-alt: #f3f4f1;
+    --accent: #2f6f4e;
+    --accent-dark: #21543a;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+    color: var(--text);
+    background: var(--surface-alt);
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 24px 16px 64px;
+    line-height: 1.6;
+}
+
+h1 {
+    font-size: 22px;
+    margin: 0 0 4px;
+}
+
+h2 {
+    font-size: 17px;
+    margin: 24px 0 8px;
+}
+
+h3 {
+    font-size: 15px;
+    margin: 16px 0 6px;
+    color: var(--text-muted);
+}
+
+a {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* 방 화면 상단 4개 탭 (오늘/주간/캘린더/정산) */
+.room-nav {
+    display: flex;
+    gap: 8px;
+    padding: 12px 0 20px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+.room-nav a {
+    padding: 6px 16px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: var(--surface);
+    font-size: 14px;
+    color: var(--text);
+    transition: background .15s, border-color .15s, color .15s;
+}
+
+.room-nav a:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    text-decoration: none;
+}
+
+.invite-code {
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+.error {
+    color: var(--text-danger);
+    background: var(--bg-danger);
+    border: 1px solid #f0c4bd;
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin: 12px 0;
+}
+
+section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+}
+
+form {
+    margin: 8px 0;
+}
+
+form label {
+    display: block;
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+}
+
+input[type="text"] {
+    display: block;
+    width: 100%;
+    max-width: 320px;
+    margin-top: 4px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    font-size: 14px;
+    background: var(--surface);
+    transition: border-color .15s, box-shadow .15s;
+}
+
+input[type="text"]:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(47, 111, 78, 0.15);
+}
+
+/* "미션 내용 [입력] [추가]" 처럼 한 줄로 붙는 폼 */
+#mission-title-form {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    max-width: 480px;
+}
+
+#mission-title-form input[type="text"] {
+    flex: 1;
+    max-width: none;
+    margin-top: 0;
+}
+
+button {
+    padding: 8px 16px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 14px;
+    transition: background .15s, border-color .15s, transform .05s;
+}
+
+button:hover {
+    background: var(--surface-alt);
+    border-color: var(--text-muted);
+}
+
+button:active {
+    transform: scale(0.97);
+}
+
+.btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+.btn-primary:hover {
+    background: var(--accent-dark);
+    border-color: var(--accent-dark);
+}
+
+.btn-done {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+.btn-done:hover {
+    background: var(--accent-dark);
+    border-color: var(--accent-dark);
+}
+
+.btn-undo {
+    color: var(--text-muted);
+}
+
+ul {
+    list-style: none;
+    padding: 0;
+    margin: 8px 0;
+}
+
+li {
+    padding: 10px 4px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    transition: background .1s;
+}
+
+li:hover {
+    background: var(--surface-alt);
+}
+
+li:last-child {
+    border-bottom: none;
+}
+
+.mission-title.done {
+    color: var(--text-muted);
+    text-decoration: line-through;
+}
+
+.penalty-badge {
+    color: var(--text-danger);
+    background: var(--bg-danger);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+/* 주간 보드 / 캘린더 그리드 */
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 12px 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+table td {
+    border: 1px solid var(--border);
+    padding: 10px;
+    text-align: center;
+    font-size: 14px;
+}
+
+table tr:first-child td {
+    background: var(--surface-alt);
+    font-weight: 600;
+}
+
+table a {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 6px;
+    transition: background .15s, color .15s;
+}
+
+table a:hover {
+    background: var(--accent);
+    color: #fff;
+    text-decoration: none;
+}
+
+.cycle-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.cycle-nav a {
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    transition: background .15s, border-color .15s, color .15s;
+}
+
+.cycle-nav a:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    text-decoration: none;
+}
+
+.day-status-done,
+.day-status-late {
+    font-size: 12px;
+    display: block;
+    margin-top: 2px;
+}
+
+.day-status-done {
+    color: var(--accent);
+}
+
+.day-status-late {
+    color: var(--text-danger);
+}
+
+.day-status-done::before,
+.day-status-late::before {
+    content: "● ";
+}
+
+/* 정산 요약 카드 */
+.settlement-summary {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 12px 0;
+}
+
+.settlement-card {
+    flex: 1;
+    min-width: 120px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+}
+
+.settlement-card .amount {
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.settlement-result {
+    font-size: 15px;
+    font-weight: 600;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin: 12px 0;
+}
